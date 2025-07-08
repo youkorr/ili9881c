@@ -274,6 +274,44 @@ void ILI9881C::update() {
 void ILI9881C::loop() {
   // Rien à faire dans la boucle pour ce pilote
 }
+void ILI9881C::dump_config() {
+  ESP_LOGCONFIG(TAG, "ILI9881C Display:");
+  ESP_LOGCONFIG(TAG, "  Physical Size: %dx%d", this->display_width_, this->display_height_);
+  ESP_LOGCONFIG(TAG, "  Effective Size: %dx%d", this->width_, this->height_);
+  
+  // Convertir l'enum en degrés pour l'affichage
+  int rotation_degrees = 0;
+  switch (this->rotation_) {
+    case ROTATION_0: rotation_degrees = 0; break;
+    case ROTATION_90: rotation_degrees = 90; break;
+    case ROTATION_180: rotation_degrees = 180; break;
+    case ROTATION_270: rotation_degrees = 270; break;
+  }
+  ESP_LOGCONFIG(TAG, "  Rotation: %d°", rotation_degrees);
+  
+  ESP_LOGCONFIG(TAG, "  Color Order: %s", this->color_order_ == COLOR_ORDER_RGB ? "RGB" : "BGR");
+  ESP_LOGCONFIG(TAG, "  Offset X: %d", this->offset_x_);
+  ESP_LOGCONFIG(TAG, "  Offset Y: %d", this->offset_y_);
+  ESP_LOGCONFIG(TAG, "  Invert Colors: %s", YESNO(this->invert_colors_));
+  ESP_LOGCONFIG(TAG, "  Auto Clear Enabled: %s", YESNO(this->auto_clear_enabled_));
+  
+  // Affichage des timings MIPI DSI
+  ESP_LOGCONFIG(TAG, "  MIPI DSI Timings:");
+  ESP_LOGCONFIG(TAG, "    HSYNC: %d", this->hsync_);
+  ESP_LOGCONFIG(TAG, "    HBP: %d", this->hbp_);
+  ESP_LOGCONFIG(TAG, "    HFP: %d", this->hfp_);
+  ESP_LOGCONFIG(TAG, "    VSYNC: %d", this->vsync_);
+  ESP_LOGCONFIG(TAG, "    VBP: %d", this->vbp_);
+  ESP_LOGCONFIG(TAG, "    VFP: %d", this->vfp_);
+  
+  ESP_LOGCONFIG(TAG, "  Init Commands: %d", this->init_commands_.size());
+  LOG_PIN("  DC Pin: ", this->dc_pin_);
+  LOG_PIN("  Reset Pin: ", this->reset_pin_);
+  
+  if (Component::is_failed()) {
+    ESP_LOGE(TAG, "Failed to initialize display");
+  }
+}
 
 void ILI9881C::dump_config() {
   ESP_LOGCONFIG(TAG, "ILI9881C Display:");
