@@ -30,7 +30,8 @@ struct InitCommand {
   bool is_delay;
 };
 
-class ILI9881C : public display::DisplayBuffer, public PollingComponent {
+// Hériter seulement de DisplayBuffer (qui hérite déjà de PollingComponent)
+class ILI9881C : public display::DisplayBuffer {
  public:
   void setup() override;
   void dump_config() override;
@@ -107,4 +108,5 @@ class ILI9881C : public display::DisplayBuffer, public PollingComponent {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
