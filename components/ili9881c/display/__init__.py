@@ -26,7 +26,8 @@ CONF_ROTATION = "rotation"
 DEPENDENCIES = ["esp32"]
 
 ili9881c_ns = cg.esphome_ns.namespace("ili9881c")
-ILI9881CDisplay = ili9881c_ns.class_("ILI9881CDisplay", cg.PollingComponent, display.DisplayBuffer)
+# Spécifier seulement DisplayBuffer comme classe parente dans le Python
+ILI9881C = ili9881c_ns.class_("ILI9881C", display.DisplayBuffer)
 
 # Énumérations pour la rotation
 Rotation = ili9881c_ns.enum("Rotation")
@@ -83,7 +84,7 @@ def validate_init_sequence(value):
 
 CONFIG_SCHEMA = display.BASIC_DISPLAY_SCHEMA.extend(
     {
-        cv.GenerateID(): cv.declare_id(ILI9881CDisplay),
+        cv.GenerateID(): cv.declare_id(ILI9881C),
         cv.Required(CONF_MODEL): cv.one_of(*MODELS, lower=True),
         cv.Optional(CONF_DC_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_RESET_PIN): pins.gpio_output_pin_schema,
@@ -103,12 +104,10 @@ CONFIG_SCHEMA = display.BASIC_DISPLAY_SCHEMA.extend(
             }
         ),
     }
-).extend(cv.polling_component_schema("1s"))
-
+)
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
-    # Seulement register_display, pas les deux !
     await display.register_display(var, config)
 
     model = config[CONF_MODEL]
