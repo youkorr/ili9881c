@@ -18,6 +18,11 @@ enum Rotation : uint8_t {
   ROTATION_270 = 270,
 };
 
+enum ColorOrder : uint8_t {
+  COLOR_ORDER_RGB = 0,
+  COLOR_ORDER_BGR = 1,
+};
+
 struct InitCommand {
   uint8_t cmd;
   std::vector<uint8_t> data;
@@ -39,10 +44,18 @@ class ILI9881C : public display::DisplayBuffer {
   void set_invert_colors(bool invert) { this->invert_colors_ = invert; }
   void set_auto_clear_enabled(bool enable) { this->auto_clear_enabled_ = enable; }
   void set_rotation(Rotation rotation);
+  void set_color_order(ColorOrder color_order) { this->color_order_ = color_order; }
   
   // Surcharges pour compatibilité ESPHome
   void set_rotation(int rotation) { 
     this->set_rotation(static_cast<Rotation>(rotation)); 
+  }
+  void set_color_order(display::ColorOrder color_order) {
+    if (color_order == display::COLOR_ORDER_RGB) {
+      this->set_color_order(COLOR_ORDER_RGB);
+    } else {
+      this->set_color_order(COLOR_ORDER_BGR);
+    }
   }
   
   // Méthodes pour la séquence d'init personnalisée
@@ -73,6 +86,7 @@ class ILI9881C : public display::DisplayBuffer {
   void set_hardware_rotation_();
   size_t get_buffer_length_internal_();
   void fill_screen_test_();
+  void apply_color_order_(uint8_t &r, uint8_t &g, uint8_t &b);
   
   GPIOPin *dc_pin_{nullptr};
   GPIOPin *reset_pin_{nullptr};
@@ -86,6 +100,7 @@ class ILI9881C : public display::DisplayBuffer {
   bool invert_colors_{false};
   bool auto_clear_enabled_{true};
   Rotation rotation_{ROTATION_0};
+  ColorOrder color_order_{COLOR_ORDER_RGB};
   
   std::vector<InitCommand> init_commands_;
   bool initialized_{false};
