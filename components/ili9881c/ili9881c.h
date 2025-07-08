@@ -20,6 +20,7 @@ struct InitCommand {
   uint8_t cmd;
   std::vector<uint8_t> data;
   uint16_t delay_ms;
+  bool is_delay;
 };
 
 class ILI9881C : public PollingComponent, public display::DisplayBuffer {
@@ -29,6 +30,7 @@ class ILI9881C : public PollingComponent, public display::DisplayBuffer {
   void update() override;
   void loop() override;
   
+  void set_dc_pin(GPIOPin *dc_pin) { this->dc_pin_ = dc_pin; }
   void set_reset_pin(GPIOPin *reset_pin) { this->reset_pin_ = reset_pin; }
   void set_backlight_pin(GPIOPin *backlight_pin) { this->backlight_pin_ = backlight_pin; }
   void set_dimensions(uint16_t width, uint16_t height);
@@ -37,6 +39,11 @@ class ILI9881C : public PollingComponent, public display::DisplayBuffer {
   void set_pixel_format(PixelFormat format) { this->pixel_format_ = format; }
   void set_invert_colors(bool invert) { this->invert_colors_ = invert; }
   void set_auto_clear_enabled(bool enable) { this->auto_clear_enabled_ = enable; }
+  
+  // Méthodes pour la séquence d'init personnalisée
+  void clear_init_sequence() { this->init_commands_.clear(); }
+  void add_init_command(uint8_t cmd, const std::vector<uint8_t> &data);
+  void add_init_delay(uint16_t delay_ms);
 
   int get_width_internal() override { return this->width_; }
   int get_height_internal() override { return this->height_; }
@@ -54,6 +61,7 @@ class ILI9881C : public PollingComponent, public display::DisplayBuffer {
   void switch_page_(uint8_t page);
   void write_display_data_();
   
+  GPIOPin *dc_pin_{nullptr};
   GPIOPin *reset_pin_{nullptr};
   GPIOPin *backlight_pin_{nullptr};
   
@@ -74,3 +82,4 @@ class ILI9881C : public PollingComponent, public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
