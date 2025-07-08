@@ -35,17 +35,20 @@ void ILI9881C::setup() {
     this->backlight_pin_->digital_write(false); // Éteint au démarrage
   }
   
+  // Appliquer la rotation pour calculer les bonnes dimensions
+  this->apply_rotation_();
+  
   // Si aucune séquence d'init personnalisée n'est fournie, utiliser celle par défaut
   if (this->init_commands_.empty()) {
     this->setup_default_init_sequence_();
   }
   
-  // Calculer la taille du buffer selon le format de pixel
+  // Calculer la taille du buffer selon le format de pixel (utiliser les dimensions physiques)
   size_t buffer_size;
   if (this->pixel_format_ == RGB565) {
-    buffer_size = this->width_ * this->height_ * 2; // 16 bits par pixel
+    buffer_size = this->display_width_ * this->display_height_ * 2; // 16 bits par pixel
   } else {
-    buffer_size = this->width_ * this->height_ * 3; // 24 bits par pixel
+    buffer_size = this->display_width_ * this->display_height_ * 3; // 24 bits par pixel
   }
   
   this->init_internal_(buffer_size);
@@ -268,8 +271,9 @@ void ILI9881C::setup_default_init_sequence_() {
 
 void ILI9881C::dump_config() {
   ESP_LOGCONFIG(TAG, "ILI9881C Display:");
-  ESP_LOGCONFIG(TAG, "  Width: %d", this->width_);
-  ESP_LOGCONFIG(TAG, "  Height: %d", this->height_);
+  ESP_LOGCONFIG(TAG, "  Physical Size: %dx%d", this->display_width_, this->display_height_);
+  ESP_LOGCONFIG(TAG, "  Effective Size: %dx%d", this->width_, this->height_);
+  ESP_LOGCONFIG(TAG, "  Rotation: %d°", (int)this->rotation_ * 90);
   ESP_LOGCONFIG(TAG, "  Offset X: %d", this->offset_x_);
   ESP_LOGCONFIG(TAG, "  Offset Y: %d", this->offset_y_);
   ESP_LOGCONFIG(TAG, "  Data Lanes: %d", this->data_lanes_);
@@ -299,9 +303,60 @@ void ILI9881C::loop() {
   // Rien à faire dans la boucle pour ce pilote
 }
 
+// Méthodes pour rotation
+void ILI9881C::set_rotation(Rotation rotation) {
+  this->rotation_ = rotation;
+  this->apply_rotation_();
+}
+
+void ILI9881C::apply_rotation_() {
+  // Calculer les nouvelles dimensions selon la rotation
+  if (this->rotation_ == ROTATION_90 || this->rotation_ == ROTATION_270) {
+    // Rotation de 90° ou 270° : inverser largeur et hauteur
+    this->width_ = this->display_height_;
+    this->height_ = this->display_width_;
+  } else {
+    // Rotation de 0° ou 180° : garder les dimensions originales
+    this->width_ = this->display_width_;
+    this->height_ = this->display_height_;
+  }
+  
+  ESP_LOGD(TAG, "Applied rotation %d°: %dx%d", (int)this->rotation_ * 90, this->width_, this->height_);
+}
+
+int ILI9881C::get_width_internal() {
+  return this->width_;
+}
+
+int ILI9881C::get_height_internal() {
+  return this->height_;
+}
+
+void ILI9881C::get_rotated_coordinates_(int x, int y, int &rotated_x, int &rotated_y) {
+  switch (this->rotation_) {
+    case ROTATION_0:
+      rotated_x = x;
+      rotated_y = y;
+      break;
+    case ROTATION_90:
+      rotated_x = y;
+      rotated_y = this->display_width_ - 1 - x;
+      break;
+    case ROTATION_180:
+      rotated_x = this->display_width_ - 1 - x;
+      rotated_y = this->display_height_ - 1 - y;
+      break;
+    case ROTATION_270:
+      rotated_x = this->display_height_ - 1 - y;
+      rotated_y = x;
+      break;
+  }
+}
+
 void ILI9881C::set_dimensions(uint16_t width, uint16_t height) {
-  this->width_ = width;
-  this->height_ = height;
+  this->display_width_ = width;
+  this->display_height_ = height;
+  this->apply_rotation_(); // Recalculer les dimensions avec la rotation actuelle
 }
 
 void ILI9881C::set_offsets(uint16_t offset_x, uint16_t offset_y) {
@@ -309,6 +364,7 @@ void ILI9881C::set_offsets(uint16_t offset_x, uint16_t offset_y) {
   this->offset_y_ = offset_y;
 }
 
+// Méthodes pour la séquence d'init
 void ILI9881C::add_init_command(uint8_t cmd, const std::vector<uint8_t> &data) {
   InitCommand init_cmd;
   init_cmd.cmd = cmd;
@@ -341,7 +397,7 @@ bool ILI9881C::init_display_() {
   this->send_init_commands_();
   
   // Configuration de la zone d'affichage
-  this->set_addr_window_(0, 0, this->width_ - 1, this->height_ - 1);
+  this->set_addr_window_(0, 0, this->display_width_ - 1, this->display_height_ - 1);
   
   // Activation du rétroéclairage si configuré
   if (this->backlight_pin_ != nullptr) {
@@ -377,6 +433,9 @@ void ILI9881C::send_init_commands_() {
       this->write_command_(cmd.cmd, cmd.data);
     }
   }
+  
+  // Configurer la rotation matérielle après les commandes d'init
+  this->set_hardware_rotation_();
 }
 
 void ILI9881C::write_command_(uint8_t cmd, const std::vector<uint8_t> &data) {
@@ -447,7 +506,7 @@ void ILI9881C::write_display_data_() {
   ESP_LOGVV(TAG, "Writing display data...");
   
   // Configurer la zone d'écriture
-  this->set_addr_window_(0, 0, this->width_ - 1, this->height_ - 1);
+  this->set_addr_window_(0, 0, this->display_width_ - 1, this->display_height_ - 1);
   
   // Set DC pin high for data
   if (this->dc_pin_ != nullptr) {
@@ -468,6 +527,10 @@ void ILI9881C::draw_absolute_pixel_internal(int x, int y, Color color) {
     return;
   }
   
+  // Appliquer la rotation
+  int rotated_x, rotated_y;
+  this->get_rotated_coordinates_(x, y, rotated_x, rotated_y);
+  
   if (this->pixel_format_ == RGB565) {
     // 16-bit per pixel
     uint32_t color565 = display::ColorUtil::color_to_565(color);
@@ -475,54 +538,33 @@ void ILI9881C::draw_absolute_pixel_internal(int x, int y, Color color) {
       color565 = ~color565;
     }
     
-    size_t pos = (y * this->width_ + x) * 2;
-    this->buffer_[pos] = (color565 >> 8) & 0xFF;
-    this->buffer_[pos + 1] = color565 & 0xFF;
+    size_t pos = (rotated_y * this->display_width_ + rotated_x) * 2;
+    if (pos + 1 < this->get_buffer_length_internal_()) {
+      this->buffer_[pos] = (color565 >> 8) & 0xFF;
+      this->buffer_[pos + 1] = color565 & 0xFF;
+    }
   } else {
     // RGB888 - 24-bit per pixel  
-    size_t pos = (y * this->width_ + x) * 3;
-    if (this->invert_colors_) {
-      this->buffer_[pos] = 255 - color.red;
-      this->buffer_[pos + 1] = 255 - color.green;
-      this->buffer_[pos + 2] = 255 - color.blue;
-    } else {
-      this->buffer_[pos] = color.red;
-      this->buffer_[pos + 1] = color.green;
-      this->buffer_[pos + 2] = color.blue;
-    }
-  }
-}
-
-void ILI9881C::fill_internal(Color color) {
-  if (this->pixel_format_ == RGB565) {
-    uint32_t color565 = display::ColorUtil::color_to_565(color);
-    if (this->invert_colors_) {
-      color565 = ~color565;
-    }
-    
-    uint16_t color_packed = color565;
-    for (size_t i = 0; i < this->get_buffer_length_internal_(); i += 2) {
-      this->buffer_[i] = (color_packed >> 8) & 0xFF;
-      this->buffer_[i + 1] = color_packed & 0xFF;
-    }
-  } else {
-    uint8_t r = this->invert_colors_ ? 255 - color.red : color.red;
-    uint8_t g = this->invert_colors_ ? 255 - color.green : color.green;
-    uint8_t b = this->invert_colors_ ? 255 - color.blue : color.blue;
-    
-    for (size_t i = 0; i < this->get_buffer_length_internal_(); i += 3) {
-      this->buffer_[i] = r;
-      this->buffer_[i + 1] = g;
-      this->buffer_[i + 2] = b;
+    size_t pos = (rotated_y * this->display_width_ + rotated_x) * 3;
+    if (pos + 2 < this->get_buffer_length_internal_()) {
+      if (this->invert_colors_) {
+        this->buffer_[pos] = 255 - color.red;
+        this->buffer_[pos + 1] = 255 - color.green;
+        this->buffer_[pos + 2] = 255 - color.blue;
+      } else {
+        this->buffer_[pos] = color.red;
+        this->buffer_[pos + 1] = color.green;
+        this->buffer_[pos + 2] = color.blue;
+      }
     }
   }
 }
 
 size_t ILI9881C::get_buffer_length_internal_() {
   if (this->pixel_format_ == RGB565) {
-    return this->width_ * this->height_ * 2;
+    return this->display_width_ * this->display_height_ * 2;
   } else {
-    return this->width_ * this->height_ * 3;
+    return this->display_width_ * this->display_height_ * 3;
   }
 }
 
@@ -530,7 +572,35 @@ void ILI9881C::switch_page_(uint8_t page) {
   this->write_command_(0xFF, {0x98, 0x81, page});
 }
 
-// Méthodes pour la gestion de l'affichage
+void ILI9881C::set_hardware_rotation_() {
+  // Configurer le registre MADCTL (0x36) pour la rotation matérielle
+  uint8_t madctl = 0x00;
+  
+  switch (this->rotation_) {
+    case ROTATION_0:
+      madctl = 0x00;  // Normal
+      break;
+    case ROTATION_90:
+      madctl = 0x60;  // Row/Col exchange + Col reverse
+      break;
+    case ROTATION_180:
+      madctl = 0xC0;  // Row reverse + Col reverse
+      break;
+    case ROTATION_270:
+      madctl = 0xA0;  // Row/Col exchange + Row reverse
+      break;
+  }
+  
+  // Ajuster selon l'inversion des couleurs
+  if (this->invert_colors_) {
+    madctl |= 0x08; // BGR bit
+  }
+  
+  ESP_LOGD(TAG, "Setting hardware rotation: MADCTL = 0x%02X", madctl);
+  this->write_command_(0x36, {madctl});
+}
+
+// Méthodes utilitaires pour l'affichage
 void ILI9881C::display_off_() {
   this->write_command_(0x28, {}); // Display OFF
 }
@@ -565,4 +635,5 @@ void ILI9881C::invert_display_(bool invert) {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
