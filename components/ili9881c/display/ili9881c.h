@@ -13,9 +13,9 @@ namespace ili9881c {
 
 enum Rotation : uint8_t {
   ROTATION_0 = 0,
-  ROTATION_90 = 90,
-  ROTATION_180 = 180,
-  ROTATION_270 = 270,
+  ROTATION_90 = 1,
+  ROTATION_180 = 2,
+  ROTATION_270 = 3,
 };
 
 enum ColorOrder : uint8_t {
@@ -46,7 +46,7 @@ class ILI9881C : public display::DisplayBuffer {
   void set_rotation(Rotation rotation);
   void set_color_order(ColorOrder color_order) { this->color_order_ = color_order; }
   
-  // Surcharge simplifiée pour compatibilité ESPHome
+  // Surcharge pour compatibilité ESPHome
   void set_rotation(int rotation) { 
     this->set_rotation(static_cast<Rotation>(rotation)); 
   }
@@ -103,4 +103,5 @@ class ILI9881C : public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
