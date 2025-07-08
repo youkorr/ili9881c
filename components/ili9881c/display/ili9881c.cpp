@@ -274,6 +274,7 @@ void ILI9881C::update() {
 void ILI9881C::loop() {
   // Rien à faire dans la boucle pour ce pilote
 }
+
 void ILI9881C::dump_config() {
   ESP_LOGCONFIG(TAG, "ILI9881C Display:");
   ESP_LOGCONFIG(TAG, "  Physical Size: %dx%d", this->display_width_, this->display_height_);
@@ -313,25 +314,6 @@ void ILI9881C::dump_config() {
   }
 }
 
-void ILI9881C::dump_config() {
-  ESP_LOGCONFIG(TAG, "ILI9881C Display:");
-  ESP_LOGCONFIG(TAG, "  Physical Size: %dx%d", this->display_width_, this->display_height_);
-  ESP_LOGCONFIG(TAG, "  Effective Size: %dx%d", this->width_, this->height_);
-  ESP_LOGCONFIG(TAG, "  Rotation: %d°", (int)this->rotation_);
-  ESP_LOGCONFIG(TAG, "  Color Order: %s", this->color_order_ == COLOR_ORDER_RGB ? "RGB" : "BGR");
-  ESP_LOGCONFIG(TAG, "  Offset X: %d", this->offset_x_);
-  ESP_LOGCONFIG(TAG, "  Offset Y: %d", this->offset_y_);
-  ESP_LOGCONFIG(TAG, "  Invert Colors: %s", YESNO(this->invert_colors_));
-  ESP_LOGCONFIG(TAG, "  Auto Clear Enabled: %s", YESNO(this->auto_clear_enabled_));
-  ESP_LOGCONFIG(TAG, "  Init Commands: %d", this->init_commands_.size());
-  LOG_PIN("  DC Pin: ", this->dc_pin_);
-  LOG_PIN("  Reset Pin: ", this->reset_pin_);
-  
-  if (Component::is_failed()) {
-    ESP_LOGE(TAG, "Failed to initialize display");
-  }
-}
-
 // Méthodes de gestion de la rotation
 void ILI9881C::set_rotation(Rotation rotation) {
   this->rotation_ = rotation;
@@ -350,7 +332,15 @@ void ILI9881C::apply_rotation_() {
     this->height_ = this->display_height_;
   }
   
-  ESP_LOGD(TAG, "Applied rotation %d°: %dx%d", (int)this->rotation_, this->width_, this->height_);
+  // Afficher les degrés pour le debug
+  int rotation_degrees = 0;
+  switch (this->rotation_) {
+    case ROTATION_0: rotation_degrees = 0; break;
+    case ROTATION_90: rotation_degrees = 90; break;
+    case ROTATION_180: rotation_degrees = 180; break;
+    case ROTATION_270: rotation_degrees = 270; break;
+  }
+  ESP_LOGD(TAG, "Applied rotation %d°: %dx%d", rotation_degrees, this->width_, this->height_);
 }
 
 int ILI9881C::get_width_internal() {
@@ -452,6 +442,7 @@ size_t ILI9881C::get_buffer_length_internal_() {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
 
