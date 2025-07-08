@@ -11,12 +11,12 @@
 namespace esphome {
 namespace ili9881c {
 
-enum PixelFormat {
+enum PixelFormat : uint8_t {
   RGB565 = 0,
   RGB888 = 1,
 };
 
-enum Rotation {
+enum Rotation : uint8_t {
   ROTATION_0 = 0,
   ROTATION_90 = 1,
   ROTATION_180 = 2,
@@ -30,7 +30,6 @@ struct InitCommand {
   bool is_delay;
 };
 
-// Hériter seulement de DisplayBuffer (qui hérite déjà de PollingComponent)
 class ILI9881C : public display::DisplayBuffer {
  public:
   void setup() override;
@@ -48,6 +47,14 @@ class ILI9881C : public display::DisplayBuffer {
   void set_invert_colors(bool invert) { this->invert_colors_ = invert; }
   void set_auto_clear_enabled(bool enable) { this->auto_clear_enabled_ = enable; }
   void set_rotation(Rotation rotation);
+  
+  // Surcharges pour accepter les types ESPHome
+  void set_rotation(int rotation) { 
+    this->set_rotation(static_cast<Rotation>(rotation)); 
+  }
+  void set_pixel_format(int format) { 
+    this->set_pixel_format(static_cast<PixelFormat>(format)); 
+  }
   
   // Méthodes pour la séquence d'init personnalisée
   void clear_init_sequence();
@@ -108,5 +115,6 @@ class ILI9881C : public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
