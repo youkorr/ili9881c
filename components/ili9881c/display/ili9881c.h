@@ -46,6 +46,14 @@ class ILI9881C : public display::DisplayBuffer {
   void set_rotation(Rotation rotation);
   void set_color_order(ColorOrder color_order) { this->color_order_ = color_order; }
   
+  // Méthodes pour les timings MIPI DSI
+  void set_hsync(uint16_t hsync) { this->hsync_ = hsync; }
+  void set_hbp(uint16_t hbp) { this->hbp_ = hbp; }
+  void set_hfp(uint16_t hfp) { this->hfp_ = hfp; }
+  void set_vsync(uint16_t vsync) { this->vsync_ = vsync; }
+  void set_vbp(uint16_t vbp) { this->vbp_ = vbp; }
+  void set_vfp(uint16_t vfp) { this->vfp_ = vfp; }
+  
   // Surcharge pour compatibilité ESPHome
   void set_rotation(int rotation) { 
     this->set_rotation(static_cast<Rotation>(rotation)); 
@@ -95,6 +103,14 @@ class ILI9881C : public display::DisplayBuffer {
   Rotation rotation_{ROTATION_0};
   ColorOrder color_order_{COLOR_ORDER_RGB};
   
+  // Timings MIPI DSI
+  uint16_t hsync_{10};   // BSP_LCD_MIPI_DSI_LCD_HSYNC
+  uint16_t hbp_{40};     // BSP_LCD_MIPI_DSI_LCD_HBP  
+  uint16_t hfp_{40};     // BSP_LCD_MIPI_DSI_LCD_HFP
+  uint16_t vsync_{4};    // BSP_LCD_MIPI_DSI_LCD_VSYNC
+  uint16_t vbp_{16};     // BSP_LCD_MIPI_DSI_LCD_VBP
+  uint16_t vfp_{16};     // BSP_LCD_MIPI_DSI_LCD_VFP
+  
   std::vector<InitCommand> init_commands_;
   bool initialized_{false};
 };
@@ -103,5 +119,6 @@ class ILI9881C : public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
