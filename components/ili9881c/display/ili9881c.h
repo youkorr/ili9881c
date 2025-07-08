@@ -7,10 +7,6 @@
 #ifdef USE_ESP32
 
 #include <vector>
-#include <esp_lcd_panel_io.h>
-#include <esp_lcd_panel_vendor.h>
-#include <esp_lcd_panel_ops.h>
-#include <esp_lcd_mipi_dsi.h>
 
 namespace esphome {
 namespace ili9881c {
@@ -52,7 +48,7 @@ class ILI9881C : public display::DisplayBuffer {
   void set_auto_clear_enabled(bool enable) { this->auto_clear_enabled_ = enable; }
   void set_rotation(Rotation rotation);
   
-  // Surcharges pour compatibilité ESPHome
+  // Surcharges pour accepter les types ESPHome
   void set_rotation(int rotation) { 
     this->set_rotation(static_cast<Rotation>(rotation)); 
   }
@@ -77,18 +73,23 @@ class ILI9881C : public display::DisplayBuffer {
   void hard_reset_();
   void send_init_commands_();
   void write_command_(uint8_t cmd, const std::vector<uint8_t> &data = {});
-  void setup_mipi_dsi_();
+  void switch_page_(uint8_t page);
   void write_display_data_();
   void set_addr_window_(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
+  void write_byte_(uint8_t data);
   void setup_default_init_sequence_();
   void apply_rotation_();
   void get_rotated_coordinates_(int x, int y, int &rotated_x, int &rotated_y);
   void set_hardware_rotation_();
   size_t get_buffer_length_internal_();
-  void fill_screen_test_();
   
-  // Callbacks MIPI DSI
-  static bool mipi_dsi_callback_(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx);
+  // Méthodes utilitaires pour l'affichage
+  void display_off_();
+  void display_on_();
+  void sleep_mode_();
+  void wake_up_();
+  void set_brightness_(uint8_t brightness);
+  void invert_display_(bool invert);
   
   GPIOPin *dc_pin_{nullptr};
   GPIOPin *reset_pin_{nullptr};
@@ -96,7 +97,7 @@ class ILI9881C : public display::DisplayBuffer {
   
   uint16_t width_{720};
   uint16_t height_{1280};
-  uint16_t display_width_{720};
+  uint16_t display_width_{720};   // Dimensions physiques de l'écran
   uint16_t display_height_{1280};
   uint16_t offset_x_{0};
   uint16_t offset_y_{0};
@@ -108,17 +109,13 @@ class ILI9881C : public display::DisplayBuffer {
   
   std::vector<InitCommand> init_commands_;
   bool initialized_{false};
-  
-  // Handles MIPI DSI
-  esp_lcd_dsi_bus_handle_t dsi_bus_{nullptr};
-  esp_lcd_panel_io_handle_t io_handle_{nullptr};
-  esp_lcd_panel_handle_t panel_handle_{nullptr};
 };
 
 }  // namespace ili9881c
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
 
