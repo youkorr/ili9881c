@@ -46,16 +46,9 @@ class ILI9881C : public display::DisplayBuffer {
   void set_rotation(Rotation rotation);
   void set_color_order(ColorOrder color_order) { this->color_order_ = color_order; }
   
-  // Surcharges pour compatibilité ESPHome
+  // Surcharge simplifiée pour compatibilité ESPHome
   void set_rotation(int rotation) { 
     this->set_rotation(static_cast<Rotation>(rotation)); 
-  }
-  void set_color_order(display::ColorOrder color_order) {
-    if (color_order == display::COLOR_ORDER_RGB) {
-      this->set_color_order(COLOR_ORDER_RGB);
-    } else {
-      this->set_color_order(COLOR_ORDER_BGR);
-    }
   }
   
   // Méthodes pour la séquence d'init personnalisée
@@ -110,9 +103,4 @@ class ILI9881C : public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
-
-
-
-
-
 
