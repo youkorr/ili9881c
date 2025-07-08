@@ -152,3 +152,4 @@ async def to_code(config):
                 delay_ms = item[CONF_DELAY]
                 cg.add(var.add_init_delay(delay_ms))
 
+
