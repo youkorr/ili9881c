@@ -19,6 +19,7 @@ from esphome import pins
 CONF_DC_PIN = "dc_pin"
 CONF_INIT_SEQUENCE = "init_sequence"
 CONF_DELAY = "delay"
+CONF_COLOR_ORDER = "color_order"  # Ajout de cette ligne
 
 DEPENDENCIES = ["esp32"]
 
@@ -85,6 +86,7 @@ CONFIG_SCHEMA = display.BASIC_DISPLAY_SCHEMA.extend(
         cv.Optional(CONF_INVERT_COLORS, default=False): cv.boolean,
         cv.Optional(CONF_AUTO_CLEAR_ENABLED, default=True): cv.boolean,
         cv.Optional(CONF_ROTATION, default=0): cv.enum(ROTATIONS, int=True),
+        cv.Optional(CONF_COLOR_ORDER, default="rgb"): cv.enum(COLOR_ORDERS, lower=True),  # Ajout de cette ligne
         cv.Optional(CONF_INIT_SEQUENCE): validate_init_sequence,
         cv.Optional(CONF_DIMENSIONS): cv.Schema(
             {
@@ -120,6 +122,7 @@ async def to_code(config):
     cg.add(var.set_invert_colors(config[CONF_INVERT_COLORS]))
     cg.add(var.set_auto_clear_enabled(config[CONF_AUTO_CLEAR_ENABLED]))
     cg.add(var.set_rotation(config[CONF_ROTATION]))
+    cg.add(var.set_color_order(config[CONF_COLOR_ORDER]))  # Ajout de cette ligne
 
     # Gestion de la séquence d'initialisation
     if CONF_INIT_SEQUENCE in config:
@@ -135,6 +138,7 @@ async def to_code(config):
             elif isinstance(item, dict) and CONF_DELAY in item:
                 delay_ms = item[CONF_DELAY]
                 cg.add(var.add_init_delay(delay_ms))
+
 
 
 
