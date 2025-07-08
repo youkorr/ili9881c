@@ -34,6 +34,13 @@ ROTATIONS = {
     270: Rotation.ROTATION_270,
 }
 
+# Énumérations pour l'ordre des couleurs
+ColorOrder = ili9881c_ns.enum("ColorOrder")
+COLOR_ORDERS = {
+    "rgb": ColorOrder.COLOR_ORDER_RGB,
+    "bgr": ColorOrder.COLOR_ORDER_BGR,
+}
+
 MODELS = {
     "custom": {
         "width": 720,
