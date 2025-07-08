@@ -26,7 +26,6 @@ CONF_ROTATION = "rotation"
 DEPENDENCIES = ["esp32"]
 
 ili9881c_ns = cg.esphome_ns.namespace("ili9881c")
-# Spécifier seulement DisplayBuffer comme classe parente dans le Python
 ILI9881C = ili9881c_ns.class_("ILI9881C", display.DisplayBuffer)
 
 # Énumérations pour la rotation
@@ -38,6 +37,13 @@ ROTATIONS = {
     270: Rotation.ROTATION_270,
 }
 
+# Énumérations pour le format de pixel
+PixelFormat = ili9881c_ns.enum("PixelFormat")
+PIXEL_FORMATS = {
+    "RGB565": PixelFormat.RGB565,
+    "RGB888": PixelFormat.RGB888,
+}
+
 MODELS = {
     "custom": {
         "width": 720,
@@ -47,11 +53,6 @@ MODELS = {
         "width": 720,
         "height": 1280,
     },
-}
-
-PIXEL_FORMATS = {
-    "RGB565": 0,
-    "RGB888": 1,
 }
 
 def validate_init_sequence(value):
@@ -89,7 +90,7 @@ CONFIG_SCHEMA = display.BASIC_DISPLAY_SCHEMA.extend(
         cv.Optional(CONF_DC_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_RESET_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_DATA_LANES, default=2): cv.int_range(min=1, max=4),
-        cv.Optional(CONF_PIXEL_FORMAT, default="RGB565"): cv.enum(PIXEL_FORMATS),
+        cv.Optional(CONF_PIXEL_FORMAT, default="RGB565"): cv.enum(PIXEL_FORMATS, upper=True),
         cv.Optional(CONF_BACKLIGHT_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_INVERT_COLORS, default=False): cv.boolean,
         cv.Optional(CONF_AUTO_CLEAR_ENABLED, default=True): cv.boolean,
