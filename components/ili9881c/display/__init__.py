@@ -12,16 +12,13 @@ from esphome.const import (
     CONF_OFFSET_WIDTH,
     CONF_INVERT_COLORS,
     CONF_AUTO_CLEAR_ENABLED,
+    CONF_ROTATION,
 )
 from esphome import pins
 
 CONF_DC_PIN = "dc_pin"
-CONF_DATA_LANES = "data_lanes"
-CONF_PIXEL_FORMAT = "pixel_format"
-CONF_BACKLIGHT_PIN = "backlight_pin"
 CONF_INIT_SEQUENCE = "init_sequence"
 CONF_DELAY = "delay"
-CONF_ROTATION = "rotation"
 
 DEPENDENCIES = ["esp32"]
 
@@ -37,19 +34,8 @@ ROTATIONS = {
     270: Rotation.ROTATION_270,
 }
 
-# Énumérations pour le format de pixel
-PixelFormat = ili9881c_ns.enum("PixelFormat")
-PIXEL_FORMATS = {
-    "RGB565": PixelFormat.RGB565,
-    "RGB888": PixelFormat.RGB888,
-}
-
 MODELS = {
     "custom": {
-        "width": 720,
-        "height": 1280,
-    },
-    "custom_720x1280": {
         "width": 720,
         "height": 1280,
     },
@@ -89,9 +75,6 @@ CONFIG_SCHEMA = display.BASIC_DISPLAY_SCHEMA.extend(
         cv.Required(CONF_MODEL): cv.one_of(*MODELS, lower=True),
         cv.Optional(CONF_DC_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_RESET_PIN): pins.gpio_output_pin_schema,
-        cv.Optional(CONF_DATA_LANES, default=2): cv.int_range(min=1, max=4),
-        cv.Optional(CONF_PIXEL_FORMAT, default="RGB565"): cv.enum(PIXEL_FORMATS, upper=True),
-        cv.Optional(CONF_BACKLIGHT_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_INVERT_COLORS, default=False): cv.boolean,
         cv.Optional(CONF_AUTO_CLEAR_ENABLED, default=True): cv.boolean,
         cv.Optional(CONF_ROTATION, default=0): cv.enum(ROTATIONS, int=True),
@@ -127,12 +110,6 @@ async def to_code(config):
         reset_pin = await cg.gpio_pin_expression(config[CONF_RESET_PIN])
         cg.add(var.set_reset_pin(reset_pin))
 
-    if CONF_BACKLIGHT_PIN in config:
-        backlight_pin = await cg.gpio_pin_expression(config[CONF_BACKLIGHT_PIN])
-        cg.add(var.set_backlight_pin(backlight_pin))
-
-    cg.add(var.set_data_lanes(config[CONF_DATA_LANES]))
-    cg.add(var.set_pixel_format(config[CONF_PIXEL_FORMAT]))
     cg.add(var.set_invert_colors(config[CONF_INVERT_COLORS]))
     cg.add(var.set_auto_clear_enabled(config[CONF_AUTO_CLEAR_ENABLED]))
     cg.add(var.set_rotation(config[CONF_ROTATION]))
@@ -151,5 +128,6 @@ async def to_code(config):
             elif isinstance(item, dict) and CONF_DELAY in item:
                 delay_ms = item[CONF_DELAY]
                 cg.add(var.add_init_delay(delay_ms))
+
 
 
