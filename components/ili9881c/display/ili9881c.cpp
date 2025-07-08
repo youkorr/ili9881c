@@ -71,7 +71,7 @@ bool ILI9881C::init_display_() {
   // Envoyer la séquence d'initialisation
   this->send_init_commands_();
   
-  // Test simple : remplir l'écran en rouge
+  // Test simple : remplir l'écran avec un pattern de couleurs
   this->fill_screen_test_();
   
   this->initialized_ = true;
@@ -161,14 +161,47 @@ void ILI9881C::set_addr_window_(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t 
   this->write_command_(0x2C, {});
 }
 
+void ILI9881C::apply_color_order_(uint8_t &r, uint8_t &g, uint8_t &b) {
+  if (this->color_order_ == COLOR_ORDER_BGR) {
+    // Échanger R et B pour BGR
+    uint8_t temp = r;
+    r = b;
+    b = temp;
+  }
+  // Pour RGB, pas de changement nécessaire
+}
+
 void ILI9881C::fill_screen_test_() {
-  ESP_LOGD(TAG, "Filling screen with red test pattern");
+  ESP_LOGD(TAG, "Filling screen with colored test pattern");
   
-  // Remplir tout le buffer en rouge (RGB888)
-  for (size_t i = 0; i < this->get_buffer_length_internal_(); i += 3) {
-    this->buffer_[i] = 255;     // R
-    this->buffer_[i + 1] = 0;   // G
-    this->buffer_[i + 2] = 0;   // B
+  // Créer un pattern de test avec différentes couleurs
+  size_t pixels_total = this->display_width_ * this->display_height_;
+  size_t pixels_per_band = pixels_total / 4;
+  
+  for (size_t i = 0; i < pixels_total; i++) {
+    uint8_t r, g, b;
+    
+    // 4 bandes de couleurs
+    if (i < pixels_per_band) {
+      r = 255; g = 0; b = 0;    // Rouge
+    } else if (i < 2 * pixels_per_band) {
+      r = 0; g = 255; b = 0;    // Vert
+    } else if (i < 3 * pixels_per_band) {
+      r = 0; g = 0; b = 255;    // Bleu
+    } else {
+      r = 255; g = 255; b = 255; // Blanc
+    }
+    
+    // Appliquer l'ordre des couleurs
+    this->apply_color_order_(r, g, b);
+    
+    // Écrire dans le buffer
+    size_t pos = i * 3;
+    if (pos + 2 < this->get_buffer_length_internal_()) {
+      this->buffer_[pos] = r;
+      this->buffer_[pos + 1] = g;
+      this->buffer_[pos + 2] = b;
+    }
   }
   
   this->write_display_data_();
@@ -205,18 +238,27 @@ void ILI9881C::draw_absolute_pixel_internal(int x, int y, Color color) {
   int rotated_x, rotated_y;
   this->get_rotated_coordinates_(x, y, rotated_x, rotated_y);
   
+  // Extraire les composantes de couleur
+  uint8_t r = color.red;
+  uint8_t g = color.green;
+  uint8_t b = color.blue;
+  
+  // Appliquer l'inversion des couleurs
+  if (this->invert_colors_) {
+    r = 255 - r;
+    g = 255 - g;
+    b = 255 - b;
+  }
+  
+  // Appliquer l'ordre des couleurs (RGB vs BGR)
+  this->apply_color_order_(r, g, b);
+  
   // RGB888 - 24-bit per pixel  
   size_t pos = (rotated_y * this->display_width_ + rotated_x) * 3;
   if (pos + 2 < this->get_buffer_length_internal_()) {
-    if (this->invert_colors_) {
-      this->buffer_[pos] = 255 - color.red;
-      this->buffer_[pos + 1] = 255 - color.green;
-      this->buffer_[pos + 2] = 255 - color.blue;
-    } else {
-      this->buffer_[pos] = color.red;
-      this->buffer_[pos + 1] = color.green;
-      this->buffer_[pos + 2] = color.blue;
-    }
+    this->buffer_[pos] = r;
+    this->buffer_[pos + 1] = g;
+    this->buffer_[pos + 2] = b;
   }
 }
 
@@ -238,6 +280,7 @@ void ILI9881C::dump_config() {
   ESP_LOGCONFIG(TAG, "  Physical Size: %dx%d", this->display_width_, this->display_height_);
   ESP_LOGCONFIG(TAG, "  Effective Size: %dx%d", this->width_, this->height_);
   ESP_LOGCONFIG(TAG, "  Rotation: %d°", (int)this->rotation_);
+  ESP_LOGCONFIG(TAG, "  Color Order: %s", this->color_order_ == COLOR_ORDER_RGB ? "RGB" : "BGR");
   ESP_LOGCONFIG(TAG, "  Offset X: %d", this->offset_x_);
   ESP_LOGCONFIG(TAG, "  Offset Y: %d", this->offset_y_);
   ESP_LOGCONFIG(TAG, "  Invert Colors: %s", YESNO(this->invert_colors_));
@@ -354,8 +397,8 @@ void ILI9881C::set_hardware_rotation_() {
       break;
   }
   
-  // Ajuster selon l'inversion des couleurs
-  if (this->invert_colors_) {
+  // Ajuster selon l'ordre des couleurs
+  if (this->color_order_ == COLOR_ORDER_BGR) {
     madctl |= 0x08; // BGR bit
   }
   
