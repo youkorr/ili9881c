@@ -45,7 +45,7 @@ void ILI9881C::setup() {
   }
   
   // Calculer la taille du buffer (921,600 pixels * 3 bytes = 2,764,800 bytes)
-  size_t buffer_size = this->display_width_ * this->display_height_ * 3; // RGB888
+  size_t buffer_size = this->get_buffer_length_internal_();
   this->init_internal_(buffer_size);
   
   ESP_LOGCONFIG(TAG, "ILI9881C display setup completed");
@@ -115,27 +115,26 @@ void ILI9881C::setup_dpi_config_() {
     return;
   }
   
-  // Configuration DPI basée sur la macro officielle mais adaptée à nos paramètres
-  *this->dpi_config_ = {
-    .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
-    .dpi_clock_freq_mhz = this->dpi_clk_freq_mhz_,
-    .virtual_channel = 0,
-    .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB888,
-    .num_fbs = 1,
-    .video_timing = {
-      .h_size = this->display_width_,
-      .v_size = this->display_height_,
-      .hsync_back_porch = this->hbp_,
-      .hsync_pulse_width = this->hsync_,
-      .hsync_front_porch = this->hfp_,
-      .vsync_back_porch = this->vbp_,
-      .vsync_pulse_width = this->vsync_,
-      .vsync_front_porch = this->vfp_,
-    },
-    .flags = {
-      .use_dma2d = true,
-    }
-  };
+  // Configuration DPI - Structure simplifiée sans designated initializers
+  memset(this->dpi_config_, 0, sizeof(esp_lcd_dpi_panel_config_t));
+  this->dpi_config_->dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
+  this->dpi_config_->dpi_clock_freq_mhz = this->dpi_clk_freq_mhz_;
+  this->dpi_config_->virtual_channel = 0;
+  this->dpi_config_->pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB888;
+  this->dpi_config_->num_fbs = 1;
+  
+  // Video timings
+  this->dpi_config_->video_timing.h_size = this->display_width_;
+  this->dpi_config_->video_timing.v_size = this->display_height_;
+  this->dpi_config_->video_timing.hsync_back_porch = this->hbp_;
+  this->dpi_config_->video_timing.hsync_pulse_width = this->hsync_;
+  this->dpi_config_->video_timing.hsync_front_porch = this->hfp_;
+  this->dpi_config_->video_timing.vsync_back_porch = this->vbp_;
+  this->dpi_config_->video_timing.vsync_pulse_width = this->vsync_;
+  this->dpi_config_->video_timing.vsync_front_porch = this->vfp_;
+  
+  // Flags
+  this->dpi_config_->flags.use_dma2d = true;
   
   ESP_LOGD(TAG, "DPI configured: %dx%d @ %d MHz", 
     this->display_width_, this->display_height_, this->dpi_clk_freq_mhz_);
@@ -148,21 +147,19 @@ void ILI9881C::convert_init_commands_() {
   for (const auto &cmd : this->init_commands_) {
     if (cmd.is_delay) {
       // Pour les délais, créer une commande avec delay_ms défini
-      ili9881c_lcd_init_cmd_t esp_cmd = {
-        .cmd = -1, // Indicateur de délai
-        .data = nullptr,
-        .data_bytes = 0,
-        .delay_ms = cmd.delay_ms
-      };
+      ili9881c_lcd_init_cmd_t esp_cmd;
+      esp_cmd.cmd = -1; // Indicateur de délai
+      esp_cmd.data = nullptr;
+      esp_cmd.data_bytes = 0;
+      esp_cmd.delay_ms = cmd.delay_ms;
       this->esp_init_commands_.push_back(esp_cmd);
     } else {
       // Pour les vraies commandes
-      ili9881c_lcd_init_cmd_t esp_cmd = {
-        .cmd = cmd.cmd,
-        .data = cmd.data.empty() ? nullptr : cmd.data.data(),
-        .data_bytes = cmd.data.size(),
-        .delay_ms = 0
-      };
+      ili9881c_lcd_init_cmd_t esp_cmd;
+      esp_cmd.cmd = cmd.cmd;
+      esp_cmd.data = cmd.data.empty() ? nullptr : cmd.data.data();
+      esp_cmd.data_bytes = cmd.data.size();
+      esp_cmd.delay_ms = 0;
       this->esp_init_commands_.push_back(esp_cmd);
     }
   }
@@ -181,16 +178,19 @@ bool ILI9881C::init_display_() {
   this->vendor_config_.mipi_config.dpi_config = this->dpi_config_;
   this->vendor_config_.mipi_config.lane_num = this->data_lanes_;
   
-  // Configuration du panel
-  esp_lcd_panel_dev_config_t panel_config = {
-    .reset_gpio_num = this->reset_pin_ ? this->reset_pin_->get_pin() : -1,
-    .rgb_ele_order = this->color_order_ == COLOR_ORDER_RGB ? LCD_RGB_ELEMENT_ORDER_RGB : LCD_RGB_ELEMENT_ORDER_BGR,
-    .bits_per_pixel = 24, // RGB888
-    .flags = {
-      .reset_active_high = 0,
-    },
-    .vendor_config = &this->vendor_config_,
-  };
+  // Configuration du panel - Utiliser la méthode ESPHome pour obtenir le pin
+  int reset_pin_num = -1;
+  if (this->reset_pin_ != nullptr) {
+    reset_pin_num = this->reset_pin_->get_pin_();
+  }
+  
+  esp_lcd_panel_dev_config_t panel_config;
+  memset(&panel_config, 0, sizeof(panel_config));
+  panel_config.reset_gpio_num = reset_pin_num;
+  panel_config.rgb_ele_order = this->color_order_ == COLOR_ORDER_RGB ? LCD_RGB_ELEMENT_ORDER_RGB : LCD_RGB_ELEMENT_ORDER_BGR;
+  panel_config.bits_per_pixel = 24; // RGB888
+  panel_config.flags.reset_active_high = 0;
+  panel_config.vendor_config = &this->vendor_config_;
   
   // Créer le panel avec le driver officiel ILI9881C
   esp_err_t ret = esp_lcd_new_panel_ili9881c(this->io_handle_, &panel_config, &this->panel_handle_);
