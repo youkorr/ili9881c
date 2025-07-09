@@ -8,6 +8,35 @@
 
 #include <vector>
 
+// Inclure l'API officielle ESP-IDF
+#if SOC_MIPI_DSI_SUPPORTED
+#include "esp_lcd_panel_vendor.h"
+#include "esp_lcd_mipi_dsi.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_io.h"
+
+// Prototypes pour le driver ILI9881C officiel
+typedef struct {
+    int cmd;
+    const void *data;
+    size_t data_bytes;
+    unsigned int delay_ms;
+} ili9881c_lcd_init_cmd_t;
+
+typedef struct {
+    const ili9881c_lcd_init_cmd_t *init_cmds;
+    uint16_t init_cmds_size;
+    struct {
+        esp_lcd_dsi_bus_handle_t dsi_bus;
+        const esp_lcd_dpi_panel_config_t *dpi_config;
+        uint8_t lane_num;
+    } mipi_config;
+} ili9881c_vendor_config_t;
+
+extern "C" esp_err_t esp_lcd_new_panel_ili9881c(const esp_lcd_panel_io_handle_t io, 
+    const esp_lcd_panel_dev_config_t *panel_dev_config, esp_lcd_panel_handle_t *ret_panel);
+#endif
+
 namespace esphome {
 namespace ili9881c {
 
@@ -53,6 +82,9 @@ class ILI9881C : public display::DisplayBuffer {
   void set_vsync(uint16_t vsync) { this->vsync_ = vsync; }
   void set_vbp(uint16_t vbp) { this->vbp_ = vbp; }
   void set_vfp(uint16_t vfp) { this->vfp_ = vfp; }
+  void set_data_lanes(uint8_t lanes) { this->data_lanes_ = lanes; }
+  void set_lane_bit_rate_mbps(uint16_t rate) { this->lane_bit_rate_mbps_ = rate; }
+  void set_dpi_clk_freq_mhz(uint8_t freq) { this->dpi_clk_freq_mhz_ = freq; }
   
   // Surcharge pour compatibilité ESPHome
   void set_rotation(int rotation) { 
@@ -76,18 +108,10 @@ class ILI9881C : public display::DisplayBuffer {
 
   bool init_display_();
   void hard_reset_();
-  void send_init_commands_();
-  void write_command_(uint8_t cmd, const std::vector<uint8_t> &data = {});
-  void write_display_data_();
-  void set_addr_window_(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
-  void write_byte_(uint8_t data);
-  void setup_default_init_sequence_();
-  void apply_rotation_();
-  void get_rotated_coordinates_(int x, int y, int &rotated_x, int &rotated_y);
-  void set_hardware_rotation_();
-  size_t get_buffer_length_internal_();
-  void fill_screen_test_();
-  void apply_color_order_(uint8_t &r, uint8_t &g, uint8_t &b);
+  void setup_mipi_dsi_();
+  void setup_dpi_config_();
+  void convert_init_commands_();
+  void send_display_buffer_();
   
   GPIOPin *dc_pin_{nullptr};
   GPIOPin *reset_pin_{nullptr};
@@ -103,15 +127,30 @@ class ILI9881C : public display::DisplayBuffer {
   Rotation rotation_{ROTATION_0};
   ColorOrder color_order_{COLOR_ORDER_RGB};
   
-  // Timings MIPI DSI
-  uint16_t hsync_{10};   // BSP_LCD_MIPI_DSI_LCD_HSYNC
-  uint16_t hbp_{40};     // BSP_LCD_MIPI_DSI_LCD_HBP  
-  uint16_t hfp_{40};     // BSP_LCD_MIPI_DSI_LCD_HFP
-  uint16_t vsync_{4};    // BSP_LCD_MIPI_DSI_LCD_VSYNC
-  uint16_t vbp_{16};     // BSP_LCD_MIPI_DSI_LCD_VBP
-  uint16_t vfp_{16};     // BSP_LCD_MIPI_DSI_LCD_VFP
+  // Paramètres MIPI DSI
+  uint8_t data_lanes_{2};
+  uint16_t lane_bit_rate_mbps_{1000};
+  uint8_t dpi_clk_freq_mhz_{80};
+  
+  // Timings MIPI DSI/DPI
+  uint16_t hsync_{40};    // hsync_pulse_width
+  uint16_t hbp_{140};     // hsync_back_porch  
+  uint16_t hfp_{40};      // hsync_front_porch
+  uint16_t vsync_{4};     // vsync_pulse_width
+  uint16_t vbp_{16};      // vsync_back_porch
+  uint16_t vfp_{16};      // vsync_front_porch
   
   std::vector<InitCommand> init_commands_;
+  std::vector<ili9881c_lcd_init_cmd_t> esp_init_commands_;
+  
+#if SOC_MIPI_DSI_SUPPORTED
+  esp_lcd_dsi_bus_handle_t dsi_bus_{nullptr};
+  esp_lcd_panel_io_handle_t io_handle_{nullptr};
+  esp_lcd_panel_handle_t panel_handle_{nullptr};
+  esp_lcd_dpi_panel_config_t *dpi_config_{nullptr};
+  ili9881c_vendor_config_t vendor_config_{};
+#endif
+  
   bool initialized_{false};
 };
 
@@ -119,6 +158,7 @@ class ILI9881C : public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
 
