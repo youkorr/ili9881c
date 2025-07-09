@@ -11,7 +11,7 @@ namespace ili9881c {
 static const char *const TAG = "ili9881c";
 
 void ILI9881C::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up ILI9881C display with official ESP-IDF driver...");
+  ESP_LOGCONFIG(TAG, "Setting up ILI9881C display...");
   
 #if !SOC_MIPI_DSI_SUPPORTED
   ESP_LOGE(TAG, "MIPI DSI not supported on this ESP32 variant");
@@ -36,15 +36,12 @@ void ILI9881C::setup() {
   // Configurer DPI
   this->setup_dpi_config_();
   
-  // Convertir les commandes d'init ESPHome vers le format ESP-IDF
-  this->convert_init_commands_();
-  
   if (!this->init_display_()) {
     Component::mark_failed();
     return;
   }
   
-  // Calculer la taille du buffer (921,600 pixels * 3 bytes = 2,764,800 bytes)
+  // Calculer la taille du buffer
   size_t buffer_size = this->get_buffer_length_internal_();
   this->init_internal_(buffer_size);
   
@@ -56,14 +53,27 @@ void ILI9881C::setup_default_init_sequence_() {
   
   this->clear_init_sequence();
   
-  // Séquence minimale basée sur les commandes standards ILI9881C
+  // Séquence d'initialisation ILI9881C standard
   this->add_init_command(0x01, {}); // Software Reset
   this->add_init_delay(100);
   
   this->add_init_command(0x11, {}); // Sleep Out
   this->add_init_delay(120);
   
-  this->add_init_command(0x3A, {0x77}); // Interface Pixel Format - 24bit/pixel RGB888
+  this->add_init_command(0x3A, {0x77}); // Interface Pixel Format - 24bit RGB888
+  
+  // Configuration Memory Access Control selon rotation et couleurs
+  uint8_t madctl = 0x00;
+  switch (this->rotation_) {
+    case ROTATION_0:   madctl = 0x00; break;
+    case ROTATION_90:  madctl = 0x60; break; 
+    case ROTATION_180: madctl = 0xC0; break;
+    case ROTATION_270: madctl = 0xA0; break;
+  }
+  if (this->color_order_ == COLOR_ORDER_BGR) {
+    madctl |= 0x08; // BGR bit
+  }
+  this->add_init_command(0x36, {madctl}); // Memory Access Control
   
   this->add_init_command(0x29, {}); // Display On
   this->add_init_delay(20);
@@ -73,21 +83,21 @@ void ILI9881C::setup_mipi_dsi_() {
 #if SOC_MIPI_DSI_SUPPORTED
   ESP_LOGD(TAG, "Configuring MIPI DSI bus...");
   
-  // Configuration du bus DSI avec les paramètres utilisateur
-  esp_lcd_dsi_bus_config_t dsi_bus_config = {
+  // Configuration du bus DSI
+  esp_lcd_dsi_bus_config_t dsi_config = {
     .bus_id = 0,
     .num_data_lanes = this->data_lanes_,
     .phy_clk_src = MIPI_DSI_PHY_CLK_SRC_DEFAULT,
     .lane_bit_rate_mbps = this->lane_bit_rate_mbps_,
   };
   
-  esp_err_t ret = esp_lcd_new_dsi_bus(&dsi_bus_config, &this->dsi_bus_);
+  esp_err_t ret = esp_lcd_new_dsi_bus(&dsi_config, &this->dsi_bus_);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to create DSI bus: %s", esp_err_to_name(ret));
     return;
   }
   
-  // Configuration DBI selon la macro officielle
+  // Configuration DBI pour les commandes
   esp_lcd_dbi_io_config_t dbi_config = {
     .virtual_channel = 0,
     .lcd_cmd_bits = 8,
@@ -109,13 +119,13 @@ void ILI9881C::setup_dpi_config_() {
   ESP_LOGD(TAG, "Configuring DPI...");
   
   // Allouer la config DPI
-  this->dpi_config_ = (esp_lcd_dpi_panel_config_t*)malloc(sizeof(esp_lcd_dpi_panel_config_t));
+  this->dpi_config_ = (esp_lcd_dpi_panel_config_t*)heap_caps_malloc(sizeof(esp_lcd_dpi_panel_config_t), MALLOC_CAP_DMA);
   if (!this->dpi_config_) {
     ESP_LOGE(TAG, "Failed to allocate DPI config");
     return;
   }
   
-  // Configuration DPI - Structure simplifiée sans designated initializers
+  // Configuration DPI
   memset(this->dpi_config_, 0, sizeof(esp_lcd_dpi_panel_config_t));
   this->dpi_config_->dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
   this->dpi_config_->dpi_clock_freq_mhz = this->dpi_clk_freq_mhz_;
@@ -136,90 +146,63 @@ void ILI9881C::setup_dpi_config_() {
   // Flags
   this->dpi_config_->flags.use_dma2d = true;
   
+  // Créer le panel DPI
+  esp_err_t ret = esp_lcd_new_panel_dpi(this->dsi_bus_, this->dpi_config_, &this->dpi_panel_);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to create DPI panel: %s", esp_err_to_name(ret));
+    return;
+  }
+  
   ESP_LOGD(TAG, "DPI configured: %dx%d @ %d MHz", 
     this->display_width_, this->display_height_, this->dpi_clk_freq_mhz_);
 #endif
 }
 
-void ILI9881C::convert_init_commands_() {
-  this->esp_init_commands_.clear();
-  
-  for (const auto &cmd : this->init_commands_) {
-    if (cmd.is_delay) {
-      // Pour les délais, créer une commande avec delay_ms défini
-      ili9881c_lcd_init_cmd_t esp_cmd;
-      esp_cmd.cmd = -1; // Indicateur de délai
-      esp_cmd.data = nullptr;
-      esp_cmd.data_bytes = 0;
-      esp_cmd.delay_ms = cmd.delay_ms;
-      this->esp_init_commands_.push_back(esp_cmd);
-    } else {
-      // Pour les vraies commandes
-      ili9881c_lcd_init_cmd_t esp_cmd;
-      esp_cmd.cmd = cmd.cmd;
-      esp_cmd.data = cmd.data.empty() ? nullptr : cmd.data.data();
-      esp_cmd.data_bytes = cmd.data.size();
-      esp_cmd.delay_ms = 0;
-      this->esp_init_commands_.push_back(esp_cmd);
-    }
-  }
-  
-  ESP_LOGD(TAG, "Converted %d init commands to ESP-IDF format", this->esp_init_commands_.size());
-}
-
 bool ILI9881C::init_display_() {
 #if SOC_MIPI_DSI_SUPPORTED
-  ESP_LOGD(TAG, "Initializing display with official driver...");
+  ESP_LOGD(TAG, "Initializing display...");
   
-  // Configuration du vendor avec nos commandes d'init
-  this->vendor_config_.init_cmds = this->esp_init_commands_.empty() ? nullptr : this->esp_init_commands_.data();
-  this->vendor_config_.init_cmds_size = this->esp_init_commands_.size();
-  this->vendor_config_.mipi_config.dsi_bus = this->dsi_bus_;
-  this->vendor_config_.mipi_config.dpi_config = this->dpi_config_;
-  this->vendor_config_.mipi_config.lane_num = this->data_lanes_;
-  
-  // Configuration du panel - Gérer le reset manuellement
-  esp_lcd_panel_dev_config_t panel_config;
-  memset(&panel_config, 0, sizeof(panel_config));
-  
-  // Désactiver le reset GPIO automatique et le gérer manuellement
-  panel_config.reset_gpio_num = -1;
-  panel_config.rgb_ele_order = this->color_order_ == COLOR_ORDER_RGB ? LCD_RGB_ELEMENT_ORDER_RGB : LCD_RGB_ELEMENT_ORDER_BGR;
-  panel_config.bits_per_pixel = 24; // RGB888
-  panel_config.flags.reset_active_high = 0;
-  panel_config.vendor_config = &this->vendor_config_;
-  
-  // Reset manuel avant de créer le panel
+  // Reset manuel
   if (this->reset_pin_ != nullptr) {
-    ESP_LOGD(TAG, "Performing manual hardware reset...");
+    ESP_LOGD(TAG, "Performing hardware reset...");
     this->reset_pin_->digital_write(false);
     delay(10);
     this->reset_pin_->digital_write(true);
     delay(120);
   }
   
-  // Créer le panel avec le driver officiel ILI9881C
-  esp_err_t ret = esp_lcd_new_panel_ili9881c(this->io_handle_, &panel_config, &this->panel_handle_);
+  // Envoyer la séquence d'initialisation via DBI
+  for (const auto &cmd : this->init_commands_) {
+    if (cmd.is_delay) {
+      ESP_LOGVV(TAG, "Delay: %dms", cmd.delay_ms);
+      delay(cmd.delay_ms);
+    } else {
+      ESP_LOGVV(TAG, "Command: 0x%02X with %d data bytes", cmd.cmd, cmd.data.size());
+      esp_err_t ret = esp_lcd_panel_io_tx_param(this->io_handle_, cmd.cmd, 
+        cmd.data.empty() ? nullptr : cmd.data.data(), cmd.data.size());
+      if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send command 0x%02X: %s", cmd.cmd, esp_err_to_name(ret));
+        return false;
+      }
+    }
+  }
+  
+  // Initialiser le panel DPI
+  esp_err_t ret = esp_lcd_panel_init(this->dpi_panel_);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to create ILI9881C panel: %s", esp_err_to_name(ret));
+    ESP_LOGE(TAG, "Failed to init DPI panel: %s", esp_err_to_name(ret));
     return false;
   }
   
-  // Initialisation (sans reset automatique puisqu'on l'a fait manuellement)
-  ret = esp_lcd_panel_init(this->panel_handle_);
+  // Activer l'affichage
+  ret = esp_lcd_panel_disp_on_off(this->dpi_panel_, true);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Panel init failed: %s", esp_err_to_name(ret));
-    return false;
-  }
-  
-  ret = esp_lcd_panel_disp_on_off(this->panel_handle_, true);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Panel display on failed: %s", esp_err_to_name(ret));
+    ESP_LOGE(TAG, "Failed to turn on display: %s", esp_err_to_name(ret));
     return false;
   }
   
   this->initialized_ = true;
-  ESP_LOGD(TAG, "Display initialized successfully with official driver");
+  ESP_LOGD(TAG, "Display initialized successfully");
   return true;
 #else
   ESP_LOGE(TAG, "MIPI DSI not supported");
@@ -238,14 +221,14 @@ void ILI9881C::update() {
 
 void ILI9881C::send_display_buffer_() {
 #if SOC_MIPI_DSI_SUPPORTED
-  if (!this->panel_handle_ || !this->initialized_) {
+  if (!this->dpi_panel_ || !this->initialized_) {
     return;
   }
   
   ESP_LOGVV(TAG, "Sending display buffer...");
   
-  // Envoyer le buffer complet à l'écran
-  esp_err_t ret = esp_lcd_panel_draw_bitmap(this->panel_handle_, 
+  // Utiliser le panel DPI pour envoyer le buffer
+  esp_err_t ret = esp_lcd_panel_draw_bitmap(this->dpi_panel_, 
     0, 0, this->display_width_, this->display_height_, this->buffer_);
   
   if (ret != ESP_OK) {
@@ -259,9 +242,14 @@ void ILI9881C::draw_absolute_pixel_internal(int x, int y, Color color) {
     return;
   }
   
-  // Appliquer l'offset et les coordonnées
-  int rotated_x = x + this->offset_x_;
-  int rotated_y = y + this->offset_y_;
+  // Appliquer l'offset
+  int pixel_x = x + this->offset_x_;
+  int pixel_y = y + this->offset_y_;
+  
+  // Vérifier les limites avec offset
+  if (pixel_x >= this->display_width_ || pixel_x < 0 || pixel_y >= this->display_height_ || pixel_y < 0) {
+    return;
+  }
   
   // Extraire les composantes de couleur
   uint8_t r = color.red;
@@ -275,11 +263,10 @@ void ILI9881C::draw_absolute_pixel_internal(int x, int y, Color color) {
     b = 255 - b;
   }
   
-  // Le driver officiel gère automatiquement l'ordre des couleurs via rgb_ele_order
-  
   // RGB888 - 24-bit per pixel  
-  size_t pos = (rotated_y * this->display_width_ + rotated_x) * 3;
+  size_t pos = (pixel_y * this->display_width_ + pixel_x) * 3;
   if (pos + 2 < this->get_buffer_length_internal_()) {
+    // L'ordre des couleurs est géré par MADCTL dans init
     this->buffer_[pos] = r;
     this->buffer_[pos + 1] = g;
     this->buffer_[pos + 2] = b;
@@ -287,15 +274,14 @@ void ILI9881C::draw_absolute_pixel_internal(int x, int y, Color color) {
 }
 
 void ILI9881C::loop() {
-  // Rien à faire dans la boucle pour ce pilote
+  // Rien à faire dans la boucle
 }
 
 void ILI9881C::dump_config() {
-  ESP_LOGCONFIG(TAG, "ILI9881C Display (Official ESP-IDF Driver):");
+  ESP_LOGCONFIG(TAG, "ILI9881C Display:");
   ESP_LOGCONFIG(TAG, "  Physical Size: %dx%d", this->display_width_, this->display_height_);
   ESP_LOGCONFIG(TAG, "  Effective Size: %dx%d", this->get_width_internal(), this->get_height_internal());
   
-  // Convertir l'enum en degrés pour l'affichage
   int rotation_degrees = 0;
   switch (this->rotation_) {
     case ROTATION_0: rotation_degrees = 0; break;
@@ -306,29 +292,26 @@ void ILI9881C::dump_config() {
   ESP_LOGCONFIG(TAG, "  Rotation: %d°", rotation_degrees);
   
   ESP_LOGCONFIG(TAG, "  Color Order: %s", this->color_order_ == COLOR_ORDER_RGB ? "RGB" : "BGR");
-  ESP_LOGCONFIG(TAG, "  Offset X: %d", this->offset_x_);
-  ESP_LOGCONFIG(TAG, "  Offset Y: %d", this->offset_y_);
+  ESP_LOGCONFIG(TAG, "  Offset: (%d, %d)", this->offset_x_, this->offset_y_);
   ESP_LOGCONFIG(TAG, "  Invert Colors: %s", YESNO(this->invert_colors_));
-  ESP_LOGCONFIG(TAG, "  Auto Clear Enabled: %s", YESNO(this->auto_clear_enabled_));
+  ESP_LOGCONFIG(TAG, "  Auto Clear: %s", YESNO(this->auto_clear_enabled_));
   
-  // Affichage des paramètres MIPI DSI
   ESP_LOGCONFIG(TAG, "  MIPI DSI Configuration:");
   ESP_LOGCONFIG(TAG, "    Data Lanes: %d", this->data_lanes_);
   ESP_LOGCONFIG(TAG, "    Lane Bit Rate: %d Mbps", this->lane_bit_rate_mbps_);
   ESP_LOGCONFIG(TAG, "    DPI Clock: %d MHz", this->dpi_clk_freq_mhz_);
   
-  // Affichage des timings DPI
   ESP_LOGCONFIG(TAG, "  DPI Video Timings:");
-  ESP_LOGCONFIG(TAG, "    HSYNC: %d", this->hsync_);
-  ESP_LOGCONFIG(TAG, "    HBP: %d", this->hbp_);
-  ESP_LOGCONFIG(TAG, "    HFP: %d", this->hfp_);
-  ESP_LOGCONFIG(TAG, "    VSYNC: %d", this->vsync_);
-  ESP_LOGCONFIG(TAG, "    VBP: %d", this->vbp_);
-  ESP_LOGCONFIG(TAG, "    VFP: %d", this->vfp_);
+  ESP_LOGCONFIG(TAG, "    H: %d + %d + %d + %d = %d", 
+    this->hbp_, this->display_width_, this->hfp_, this->hsync_, 
+    this->hbp_ + this->display_width_ + this->hfp_ + this->hsync_);
+  ESP_LOGCONFIG(TAG, "    V: %d + %d + %d + %d = %d", 
+    this->vbp_, this->display_height_, this->vfp_, this->vsync_,
+    this->vbp_ + this->display_height_ + this->vfp_ + this->vsync_);
   
-  ESP_LOGCONFIG(TAG, "  Buffer Size: %zu bytes (%.2f MB)", 
-    this->get_buffer_length_internal_(), this->get_buffer_length_internal_() / (1024.0 * 1024.0));
-  ESP_LOGCONFIG(TAG, "  Init Commands: %d", this->init_commands_.size());
+  ESP_LOGCONFIG(TAG, "  Buffer Size: %.2f MB", this->get_buffer_length_internal_() / (1024.0 * 1024.0));
+  ESP_LOGCONFIG(TAG, "  Init Commands: %zu", this->init_commands_.size());
+  
   LOG_PIN("  Reset Pin: ", this->reset_pin_);
   
 #if !SOC_MIPI_DSI_SUPPORTED
@@ -355,7 +338,6 @@ void ILI9881C::set_rotation(Rotation rotation) {
   this->rotation_ = rotation;
 }
 
-// Méthodes pour la séquence d'init personnalisée
 void ILI9881C::add_init_command(uint8_t cmd, const std::vector<uint8_t> &data) {
   InitCommand init_cmd;
   init_cmd.cmd = cmd;
@@ -387,13 +369,14 @@ int ILI9881C::get_height_internal() {
 }
 
 size_t ILI9881C::get_buffer_length_internal_() {
-  return this->display_width_ * this->display_height_ * 3; // RGB888 = 3 bytes par pixel
+  return this->display_width_ * this->display_height_ * 3; // RGB888
 }
 
 }  // namespace ili9881c
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
 
