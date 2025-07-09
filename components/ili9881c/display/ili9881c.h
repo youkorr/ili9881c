@@ -106,12 +106,14 @@ class ILI9881C : public display::DisplayBuffer {
  protected:
   void draw_absolute_pixel_internal(int x, int y, Color color) override;
 
+  // Déclarations des méthodes manquantes
   bool init_display_();
-  void hard_reset_();
+  void setup_default_init_sequence_();
   void setup_mipi_dsi_();
   void setup_dpi_config_();
   void convert_init_commands_();
   void send_display_buffer_();
+  size_t get_buffer_length_internal_();
   
   GPIOPin *dc_pin_{nullptr};
   GPIOPin *reset_pin_{nullptr};
@@ -158,6 +160,7 @@ class ILI9881C : public display::DisplayBuffer {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
 
