@@ -21,7 +21,12 @@ CONF_INIT_SEQUENCE = "init_sequence"
 CONF_DELAY = "delay"
 CONF_COLOR_ORDER = "color_order"
 
-# Paramètres de timing MIPI DSI
+# Nouveaux paramètres MIPI DSI
+CONF_DATA_LANES = "data_lanes"
+CONF_LANE_BIT_RATE_MBPS = "lane_bit_rate_mbps"
+CONF_DPI_CLK_FREQ_MHZ = "dpi_clk_freq_mhz"
+
+# Paramètres de timing MIPI DPI
 CONF_HSYNC = "hsync"
 CONF_HBP = "hbp" 
 CONF_HFP = "hfp"
@@ -97,9 +102,14 @@ CONFIG_SCHEMA = display.BASIC_DISPLAY_SCHEMA.extend(
         cv.Optional(CONF_COLOR_ORDER, default="rgb"): cv.enum(COLOR_ORDERS, lower=True),
         cv.Optional(CONF_INIT_SEQUENCE): validate_init_sequence,
         
-        # Paramètres de timing MIPI DSI
-        cv.Optional(CONF_HSYNC, default=10): cv.positive_int,
-        cv.Optional(CONF_HBP, default=40): cv.positive_int,
+        # Paramètres MIPI DSI
+        cv.Optional(CONF_DATA_LANES, default=2): cv.int_range(min=1, max=4),
+        cv.Optional(CONF_LANE_BIT_RATE_MBPS, default=1000): cv.int_range(min=100, max=2000),
+        cv.Optional(CONF_DPI_CLK_FREQ_MHZ, default=80): cv.int_range(min=10, max=200),
+        
+        # Paramètres de timing DPI
+        cv.Optional(CONF_HSYNC, default=40): cv.positive_int,
+        cv.Optional(CONF_HBP, default=140): cv.positive_int,
         cv.Optional(CONF_HFP, default=40): cv.positive_int,
         cv.Optional(CONF_VSYNC, default=4): cv.positive_int,
         cv.Optional(CONF_VBP, default=16): cv.positive_int,
@@ -141,7 +151,12 @@ async def to_code(config):
     cg.add(var.set_rotation(config[CONF_ROTATION]))
     cg.add(var.set_color_order(config[CONF_COLOR_ORDER]))
 
-    # Configuration des timings MIPI DSI
+    # Configuration des paramètres MIPI DSI
+    cg.add(var.set_data_lanes(config[CONF_DATA_LANES]))
+    cg.add(var.set_lane_bit_rate_mbps(config[CONF_LANE_BIT_RATE_MBPS]))
+    cg.add(var.set_dpi_clk_freq_mhz(config[CONF_DPI_CLK_FREQ_MHZ]))
+
+    # Configuration des timings DPI
     cg.add(var.set_hsync(config[CONF_HSYNC]))
     cg.add(var.set_hbp(config[CONF_HBP]))
     cg.add(var.set_hfp(config[CONF_HFP]))
@@ -163,6 +178,7 @@ async def to_code(config):
             elif isinstance(item, dict) and CONF_DELAY in item:
                 delay_ms = item[CONF_DELAY]
                 cg.add(var.add_init_delay(delay_ms))
+
 
 
 
