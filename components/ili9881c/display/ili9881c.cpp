@@ -178,19 +178,25 @@ bool ILI9881C::init_display_() {
   this->vendor_config_.mipi_config.dpi_config = this->dpi_config_;
   this->vendor_config_.mipi_config.lane_num = this->data_lanes_;
   
-  // Configuration du panel - Utiliser la méthode ESPHome pour obtenir le pin
-  int reset_pin_num = -1;
-  if (this->reset_pin_ != nullptr) {
-    reset_pin_num = this->reset_pin_->get_pin_();
-  }
-  
+  // Configuration du panel - Gérer le reset manuellement
   esp_lcd_panel_dev_config_t panel_config;
   memset(&panel_config, 0, sizeof(panel_config));
-  panel_config.reset_gpio_num = reset_pin_num;
+  
+  // Désactiver le reset GPIO automatique et le gérer manuellement
+  panel_config.reset_gpio_num = -1;
   panel_config.rgb_ele_order = this->color_order_ == COLOR_ORDER_RGB ? LCD_RGB_ELEMENT_ORDER_RGB : LCD_RGB_ELEMENT_ORDER_BGR;
   panel_config.bits_per_pixel = 24; // RGB888
   panel_config.flags.reset_active_high = 0;
   panel_config.vendor_config = &this->vendor_config_;
+  
+  // Reset manuel avant de créer le panel
+  if (this->reset_pin_ != nullptr) {
+    ESP_LOGD(TAG, "Performing manual hardware reset...");
+    this->reset_pin_->digital_write(false);
+    delay(10);
+    this->reset_pin_->digital_write(true);
+    delay(120);
+  }
   
   // Créer le panel avec le driver officiel ILI9881C
   esp_err_t ret = esp_lcd_new_panel_ili9881c(this->io_handle_, &panel_config, &this->panel_handle_);
@@ -199,13 +205,7 @@ bool ILI9881C::init_display_() {
     return false;
   }
   
-  // Reset et initialisation
-  ret = esp_lcd_panel_reset(this->panel_handle_);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Panel reset failed: %s", esp_err_to_name(ret));
-    return false;
-  }
-  
+  // Initialisation (sans reset automatique puisqu'on l'a fait manuellement)
   ret = esp_lcd_panel_init(this->panel_handle_);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Panel init failed: %s", esp_err_to_name(ret));
@@ -394,6 +394,7 @@ size_t ILI9881C::get_buffer_length_internal_() {
 }  // namespace esphome
 
 #endif  // USE_ESP32
+
 
 
 
